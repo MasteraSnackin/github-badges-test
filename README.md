@@ -7,3 +7,7 @@ Test repository for earning GitHub achievement badges
 - [ ] Pull Shark badge
 - [ ] YOLO badge
 - [ ] Pair Extraordinaire badge
+
+- [ ] ## Progress
+
+First PR merged successfully!
