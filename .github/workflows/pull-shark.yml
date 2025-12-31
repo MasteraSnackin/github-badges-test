@@ -1,0 +1,104 @@
+name: Pull Shark Automation
+
+# Trigger workflow manually or on schedule
+on:
+  workflow_dispatch:
+    inputs:
+      pr_count:
+        description: 'Number of PRs to create'
+        required: true
+        default: '5'
+        type: string
+  schedule:
+    # Run once a day at 10 AM UTC
+    - cron: '0 10 * * *'
+
+jobs:
+  create-prs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Create and merge PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_COUNT: ${{ github.event.inputs.pr_count || '5' }}
+        run: |
+          echo "Creating $PR_COUNT pull requests..."
+          
+          for i in $(seq 1 $PR_COUNT); do
+            TIMESTAMP=$(date +%s)
+            BRANCH="pull-shark-$TIMESTAMP-$i"
+            FILE="pull-shark-$TIMESTAMP-$i.md"
+            
+            echo "Creating branch: $BRANCH"
+            git checkout -b $BRANCH
+            
+            echo "Creating file: $FILE"
+            cat > $FILE << EOF
+# Pull Shark PR #$i - $TIMESTAMP
+
+This is an automated pull request created by the Pull Shark workflow.
+
+- Created: $(date)
+- Branch: $BRANCH
+- PR Number: $i of $PR_COUNT
+
+## Purpose
+Working towards earning the Pull Shark achievement badge!
+EOF
+            
+            git add $FILE
+            git commit -m "Add pull shark file $i: $FILE"
+            git push origin $BRANCH
+            
+            echo "Creating PR for branch: $BRANCH"
+            PR_URL=$(gh pr create \
+              --title "Pull Shark PR #$i - Automated" \
+              --body "Automated PR #$i for Pull Shark badge progress. Created at $TIMESTAMP" \
+              --base main \
+              --head $BRANCH)
+            
+            echo "PR created: $PR_URL"
+            
+            # Extract PR number from URL
+            PR_NUMBER=$(echo $PR_URL | grep -oP '\d+$')
+            
+            # Wait a moment for PR to be fully created
+            sleep 2
+            
+            echo "Merging PR #$PR_NUMBER"
+            gh pr merge $PR_NUMBER --merge --auto
+            
+            # Switch back to main and pull latest changes
+            git checkout main
+            git pull origin main
+            
+            echo "Completed PR $i of $PR_COUNT"
+            echo "---"
+            
+            # Small delay between PRs
+            sleep 3
+          done
+          
+          echo "Successfully created and merged $PR_COUNT pull requests!"
+      
+      - name: Summary
+        run: |
+          echo "## Pull Shark Automation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Created and merged ${{ github.event.inputs.pr_count || '5' }} pull requests" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View all PRs: https://github.com/${{ github.repository }}/pulls?q=is%3Apr" >> $GITHUB_STEP_SUMMARY
